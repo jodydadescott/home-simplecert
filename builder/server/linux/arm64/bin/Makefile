@@ -1,0 +1,5 @@
+home-simplecert-server:
+	env GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build -v -trimpath -o home-simplecert-server ../../../../../server/home-simplecert-server.go
+
+clean:
+	$(RM) -f home-simplecert-server
