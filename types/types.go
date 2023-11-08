@@ -1,16 +1,9 @@
 package types
 
 import (
-	"os"
-
 	"github.com/go-acme/lego/v4/certificate"
 	"github.com/jinzhu/copier"
 	hashserver "github.com/jodydadescott/simple-go-hash-auth/server"
-)
-
-const (
-	certFilePerm = os.FileMode(0644)
-	certDirPerm  = os.FileMode(0755)
 )
 
 type CR struct {
