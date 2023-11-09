@@ -24,8 +24,7 @@ linux-amd64-container:
 	$(MAKE) linux-amd64
 	mkdir -p containers/linux-amd64
 	cp home-simplecert-linux-amd64 containers/linux-amd64/home-simplecert
-	cat Dockerfile | sed 's/FROM fedora.*/FROM fedora:37/g' > containers/linux-amd64/Dockerfile
-	cat Dockerfile | sed 's/FROM image.*/FROM fedora:37/g'
+	cat Dockerfile | sed 's/FROM image.*/FROM fedora:37/g' > containers/linux-amd64/Dockerfile
 	cd containers/linux-amd64 && docker build -t $(DOCKER_REGISTRY)/$(DOCKER_IMAGE_NAME)-amd64:$(DOCKER_IMAGE_TAG) .
 
 linux-arm64-container:
