@@ -124,6 +124,7 @@ func (t *Client) getToken() (*Token, error) {
 		req.Header.Set("Content-Type", "application/json")
 
 		resp, err := t.httpClient.Do(req)
+
 		if err != nil {
 			return nil, err
 		}

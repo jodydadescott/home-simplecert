@@ -1,10 +1,6 @@
 package client
 
-import (
-	logger "github.com/jodydadescott/jody-go-logger"
-)
-
-func ExampleNormalConfig() *Config {
+func ExampleConfig() *Config {
 
 	refreshedHook := &Hook{
 		Name: "echo",
@@ -20,9 +16,6 @@ func ExampleNormalConfig() *Config {
 		RefreshInterval: defaultRefreshInterval,
 		Daemon:          true,
 		SkipVerify:      false,
-		Logger: &Logger{
-			LogLevel: logger.DebugLevel,
-		},
 	}
 
 	domain1 := &Domain{
@@ -52,9 +45,6 @@ func ExampleSynologyConfig() *Config {
 		Secret:     "the secret",
 		Server:     "https://...",
 		SkipVerify: false,
-		Logger: &Logger{
-			LogLevel: logger.DebugLevel,
-		},
 	}
 
 	c.AddDomain(domain)

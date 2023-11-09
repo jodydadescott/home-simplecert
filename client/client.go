@@ -20,6 +20,7 @@ import (
 type Client struct {
 	config *Config
 	client *libclient.Client
+	osType OSType
 }
 
 func New(config *Config) (*Client, error) {
@@ -30,10 +31,6 @@ func New(config *Config) (*Client, error) {
 
 	config = config.Clone()
 
-	if config.Logger != nil {
-		logger.SetConfig(config.Logger)
-	}
-
 	if config.Secret == "" {
 		return nil, fmt.Errorf("secret is required")
 	}
@@ -42,38 +39,99 @@ func New(config *Config) (*Client, error) {
 		return nil, fmt.Errorf("server is required")
 	}
 
-	switch config.ModeType {
+	processDomain := func(domain *Domain) error {
 
-	case NormalModeType:
-
-		if len(config.Domains) <= 0 {
-			return nil, fmt.Errorf("one or more domains are required")
+		if domain.Name == "" {
+			return fmt.Errorf("each domain must have a name")
 		}
+
+		if domain.CertFile == "" {
+			return fmt.Errorf("domain %s must have a certFile", domain.Name)
+		}
+
+		if domain.KeyFile == "" {
+			return fmt.Errorf("domain %s must have a keyFile", domain.Name)
+		}
+
+		return nil
+	}
+
+	processDomains := func() error {
+
+		var errs *multierror.Error
 
 		for _, domain := range config.Domains {
-
-			if domain.Name == "" {
-				return nil, fmt.Errorf("each domain must have a name")
+			err := processDomain(domain)
+			if err != nil {
+				errs = multierror.Append(errs, err)
 			}
-
-			if domain.CertFile == "" {
-				return nil, fmt.Errorf("domain %s must have a certFile", domain.Name)
-			}
-
-			if domain.KeyFile == "" {
-				return nil, fmt.Errorf("domain %s must have a keyFile", domain.Name)
-			}
-
 		}
 
-	case SynologyModeType:
-		if len(config.Domains) != 1 {
-			return nil, fmt.Errorf("SynologyMode requires a single domain")
+		return errs.ErrorOrNil()
+	}
+
+	processSynologyDomains := func() error {
+
+		domainsLen := len(config.Domains)
+
+		if domainsLen >= 0 {
+			return fmt.Errorf("Missing Domain")
 		}
 
+		if domainsLen > 1 {
+			return fmt.Errorf("There are %d domains in the configuration and there should only be 1", domainsLen)
+		}
+
+		domain := config.Domains[0]
+
+		if domain.Name == "" {
+			return fmt.Errorf("domain must have a name")
+		}
+
+		if domain.CertFile != "" {
+			zap.L().Debug(fmt.Sprintf("Domain %s for synology client has certFile set; it will be ignored", domain.Name))
+			domain.CertFile = ""
+		}
+
+		if domain.KeyFile != "" {
+			zap.L().Debug(fmt.Sprintf("Domain %s for synology client has keyFile set; it will be ignored", domain.Name))
+			domain.KeyFile = ""
+		}
+
+		if domain.FullChain != "" {
+			zap.L().Debug(fmt.Sprintf("Domain %s for synology client has fullChain set; it will be ignored", domain.Name))
+			domain.FullChain = ""
+		}
+
+		return nil
+	}
+
+	osType := getOS()
+
+	if config.IgnoreOSType {
+		osType = OSTypeEmpty
+		zap.L().Debug("IgnoreOSType is set to true")
+	} else {
+		zap.L().Debug(fmt.Sprintf("OSType is %s", string(osType)))
+	}
+
+	switch osType {
+
+	case OSTypeSynology:
+		err := processSynologyDomains()
+		if err != nil {
+			return nil, err
+		}
+
+	default:
+		err := processDomains()
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	return &Client{
+		osType: osType,
 		config: config,
 		client: libclient.New(&libclient.Config{
 			Secret:     config.Secret,
@@ -84,16 +142,6 @@ func New(config *Config) (*Client, error) {
 }
 
 func (t *Client) Run(ctx context.Context) error {
-
-	fileExist := func(filename string) bool {
-
-		_, err := os.Stat(filename)
-		if err == nil {
-			return true
-		}
-
-		return false
-	}
 
 	compare := func(file string, abytes []byte) bool {
 
@@ -144,12 +192,12 @@ func (t *Client) Run(ctx context.Context) error {
 
 		err := os.MkdirAll(filepath.Dir(domain.CertFile), dirPerm)
 		if err != nil {
-			return err
+			return fmt.Errorf("error creating cert directory %s; %w", filepath.Dir(domain.CertFile), err)
 		}
 
 		err = os.WriteFile(domain.CertFile, cert.GetCertPEM(), filePerm)
 		if err != nil {
-			return err
+			return fmt.Errorf("error writing cert file %s; %w", domain.CertFile, err)
 		}
 
 		err = os.MkdirAll(filepath.Dir(domain.KeyFile), dirPerm)
@@ -159,19 +207,19 @@ func (t *Client) Run(ctx context.Context) error {
 
 		err = os.WriteFile(domain.KeyFile, cert.GetKeyPEM(), filePerm)
 		if err != nil {
-			return err
+			return fmt.Errorf("error writing key file %s; %w", domain.KeyFile, err)
 		}
 
 		if domain.FullChain != "" {
 
 			err := os.MkdirAll(filepath.Dir(domain.CertFile), dirPerm)
 			if err != nil {
-				return err
+				return fmt.Errorf("error creating fullChain directory %s; %w", filepath.Dir(domain.FullChain), err)
 			}
 
 			err = os.WriteFile(domain.FullChain, cert.GetCertPEM(), filePerm)
 			if err != nil {
-				return err
+				return fmt.Errorf("error writing fullChain file %s; %w", domain.FullChain, err)
 			}
 		}
 
@@ -182,14 +230,15 @@ func (t *Client) Run(ctx context.Context) error {
 
 		zap.L().Debug(fmt.Sprintf("Running Hook for domain %s", domain.Name))
 		cmd := exec.Command(domain.Hook.Name, domain.Hook.Args...)
-		out, err := cmd.CombinedOutput()
+		rawoutput, err := cmd.CombinedOutput()
+		output := strings.ReplaceAll(string(rawoutput), "\n", "")
 
-		if werr, ok := err.(*exec.ExitError); ok {
-			if s := werr.Error(); s != "0" {
-				zap.L().Debug(fmt.Sprintf("Hook returned code %s error->%s, output->%s", s, string(out), string(out)))
-				return err
-			}
-			zap.L().Debug(fmt.Sprintf("Hook returned zero code. Ouput->%s", string(out)))
+		if err != nil {
+			return fmt.Errorf("Command '%s' for Domain %s returned output %s and error %w", domain.Hook.GetCmd(), domain.Name, output, err)
+		}
+
+		if logger.Trace {
+			zap.L().Debug(fmt.Sprintf("Command '%s' for Domain %s returned output %s", domain.Hook.GetCmd(), domain.Name, output))
 		}
 
 		return nil
@@ -271,6 +320,10 @@ func (t *Client) Run(ctx context.Context) error {
 
 		domain := t.config.Domains[0]
 
+		if domain == nil {
+			panic("this should not happen")
+		}
+
 		b, err := os.ReadFile(synologyDefaultFile)
 		if err != nil {
 			return err
@@ -305,20 +358,18 @@ func (t *Client) Run(ctx context.Context) error {
 
 	defer t.client.Shutdown()
 
-	switch t.config.ModeType {
+	switch t.osType {
 
-	case NormalModeType:
-		if t.config.Daemon {
-			runTick()
-			runDaemon()
-			return nil
-		}
-		return run()
-
-	case SynologyModeType:
+	case OSTypeSynology:
 		return runSynologyMode()
 
 	}
 
-	return nil
+	if t.config.Daemon {
+		runTick()
+		runDaemon()
+		return nil
+	}
+	return run()
+
 }

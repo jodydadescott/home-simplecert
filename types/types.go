@@ -2,6 +2,8 @@ package types
 
 import (
 	"bytes"
+	"net/http"
+	"net/http/httputil"
 
 	"github.com/go-acme/lego/v4/certificate"
 	"github.com/jinzhu/copier"
@@ -140,6 +142,31 @@ type SimpleMessage struct {
 // Clone return copy
 func (t *SimpleMessage) Clone() *SimpleMessage {
 	c := &SimpleMessage{}
+	copier.Copy(&c, &t)
+	return c
+}
+
+type HTTPDebug struct {
+	Request  string `json:"request,omitempty" yaml:"request,omitempty"`
+	Response string `json:"response,omitempty" yaml:"response,omitempty"`
+}
+
+func NewHTTPDebug(r *http.Request, response []byte) *HTTPDebug {
+
+	breq, err := httputil.DumpRequest(r, true)
+	if err != nil {
+		panic(err)
+	}
+
+	return &HTTPDebug{
+		Request:  string(breq),
+		Response: string(response),
+	}
+}
+
+// Clone return copy
+func (t *HTTPDebug) Clone() *HTTPDebug {
+	c := &HTTPDebug{}
 	copier.Copy(&c, &t)
 	return c
 }

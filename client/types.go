@@ -1,8 +1,6 @@
 package client
 
 import (
-	"fmt"
-	"strings"
 	"time"
 
 	"github.com/jinzhu/copier"
@@ -13,27 +11,6 @@ import (
 type CR = types.CR
 type Logger = logger.Config
 
-func (t *Config) ParseModeType(s string) error {
-
-	switch strings.ToLower(s) {
-
-	case "":
-		t.ModeType = NormalModeType
-
-	case string(NormalModeType):
-		t.ModeType = NormalModeType
-
-	case string(SynologyModeType):
-		t.ModeType = SynologyModeType
-
-	default:
-		return fmt.Errorf("ModeType %s is invalid", s)
-
-	}
-
-	return nil
-}
-
 type Config struct {
 	Notes           string        `json:"notes,omitempty" yaml:"notes,omitempty"`
 	Secret          string        `json:"secret" yaml:"secret"`
@@ -42,8 +19,7 @@ type Config struct {
 	Domains         []*Domain     `json:"domains,omitempty" yaml:"domains,omitempty"`
 	RefreshInterval time.Duration `json:"refreshInterval,omitempty" yaml:"refreshInterval,omitempty"`
 	Daemon          bool          `json:"daemon,omitempty" yaml:"daemon,omitempty"`
-	Logger          *Logger       `json:"logger,omitempty" yaml:"logger,omitempty"`
-	ModeType        ModeType      `json:"modeType,omitempty" yaml:"modeType,omitempty"`
+	IgnoreOSType    bool          `json:"ignoreOSType,omitempty" yaml:"ignoreOSType,omitempty"`
 }
 
 // Clone return copy
@@ -84,6 +60,14 @@ func (t *Hook) Clone() *Hook {
 	c := &Hook{}
 	copier.Copy(&c, &t)
 	return c
+}
+
+func (t *Hook) GetCmd() string {
+	cmd := t.Name
+	for _, arg := range t.Args {
+		cmd = cmd + " " + arg
+	}
+	return cmd
 }
 
 // Clone return copy

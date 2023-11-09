@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"net/http/httputil"
 	"os"
 	"path/filepath"
 	"strings"
@@ -17,6 +16,8 @@ import (
 	logger "github.com/jodydadescott/jody-go-logger"
 	hashserver "github.com/jodydadescott/simple-go-hash-auth/server"
 	"go.uber.org/zap"
+
+	"github.com/jodydadescott/home-simplecert/types"
 )
 
 type DomainWrapper struct {
@@ -168,10 +169,6 @@ func New(config *Config) (*Server, error) {
 	}
 
 	config = config.Clone()
-
-	if config.Logger != nil {
-		logger.SetConfig(config.Logger)
-	}
 
 	if config.Secret == "" {
 		return nil, fmt.Errorf("secret is required")
@@ -500,20 +497,8 @@ func (t *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	fmt.Fprintf(w, string(b))
 
 	if logger.Wire {
-
-		breq, _ := httputil.DumpRequest(r, true)
-
-		d := &HTTPDebug{
-			Request:  string(breq),
-			Response: string(b),
-		}
-
-		b, err := json.Marshal(d)
-
-		if err != nil {
-			zap.L().Debug(fmt.Sprintf("HTTPDebug Error %s", err.Error()))
-		}
-
+		httpDebug := types.NewHTTPDebug(r, b)
+		b, _ := json.Marshal(httpDebug)
 		zap.L().Debug(fmt.Sprintf("HTTPDebug->%s", string(b)))
 	}
 
