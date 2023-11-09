@@ -1,4 +1,4 @@
-home-simplecert-server
-home-simplecert-client
+home-simplecert
 tmp/
 cache/
+config.yaml
