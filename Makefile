@@ -25,15 +25,19 @@ linux-amd64-container:
 	mkdir -p containers/linux-amd64
 	cp home-simplecert-linux-amd64 containers/linux-amd64/home-simplecert
 	cat Dockerfile | sed 's/FROM fedora.*/FROM fedora:37/g' > containers/linux-amd64/Dockerfile
+	cat Dockerfile | sed 's/FROM image.*/FROM fedora:37/g'
 	cd containers/linux-amd64 && docker build -t $(DOCKER_REGISTRY)/$(DOCKER_IMAGE_NAME)-amd64:$(DOCKER_IMAGE_TAG) .
 
 linux-arm64-container:
 	$(MAKE) linux-arm64
 	mkdir -p containers/linux-arm64
 	cp home-simplecert-linux-arm64 containers/linux-arm64/home-simplecert
-	cat Dockerfile | sed 's/FROM fedora.*/FROM fedora:37/g' > containers/linux-arm64/Dockerfile
+	cat Dockerfile | sed 's/FROM image.*/FROM arm64v8/fedora:37/g'
 	cd containers/linux-arm64 && docker build -t $(DOCKER_REGISTRY)/$(DOCKER_IMAGE_NAME)-arm64:$(DOCKER_IMAGE_TAG) .
 
 clean:
-	$(RM) home-simplecert
-	$(RM) -r build
+	$(RM) home-simplecert-darwin-amd64
+	$(RM) home-simplecert-darwin-arm64
+	$(RM) home-simplecert-linux-amd64
+	$(RM) home-simplecert-linux-arm64
+	$(RM) -r containers
