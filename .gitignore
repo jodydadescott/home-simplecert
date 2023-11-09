@@ -1,4 +1,8 @@
 home-simplecert
 tmp/
 cache/
-config.yaml
+containers/
+home-simplecert-darwin-amd64
+home-simplecert-darwin-arm64
+home-simplecert-linux-amd64
+home-simplecert-linux-arm64

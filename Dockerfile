@@ -1,4 +1,4 @@
-FROM fedora:37
+FROM image:tag
 WORKDIR /
 
 RUN dnf -y update
