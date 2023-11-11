@@ -3,8 +3,9 @@ module github.com/jodydadescott/home-simplecert
 go 1.21.3
 
 require (
+	github.com/go-acme/lego/v4 v4.3.1
+	github.com/hashicorp/go-multierror v1.1.1
 	github.com/jinzhu/copier v0.4.0
-	go.uber.org/zap v1.26.0
 )
 
 require (
@@ -33,11 +34,10 @@ require (
 	github.com/dimchansky/utfbom v1.1.1 // indirect
 	github.com/dnsimple/dnsimple-go v0.63.0 // indirect
 	github.com/exoscale/egoscale v0.46.0 // indirect
-	github.com/fatih/color v1.7.0 // indirect
+	github.com/fatih/color v1.16.0 // indirect
 	github.com/fatih/structs v1.1.0 // indirect
 	github.com/foomo/tlsconfig v0.0.0-20180418120404-b67861b076c9 // indirect
 	github.com/form3tech-oss/jwt-go v3.2.2+incompatible // indirect
-	github.com/go-acme/lego/v4 v4.3.1 // indirect
 	github.com/go-errors/errors v1.1.1 // indirect
 	github.com/go-resty/resty/v2 v2.4.0 // indirect
 	github.com/gofrs/uuid v4.0.0+incompatible // indirect
@@ -52,6 +52,7 @@ require (
 	github.com/hashicorp/go-cleanhttp v0.5.1 // indirect
 	github.com/hashicorp/go-retryablehttp v0.6.8 // indirect
 	github.com/iij/doapi v0.0.0-20190504054126-0bbf12d6d7df // indirect
+	github.com/inconshreveable/mousetrap v1.1.0 // indirect
 	github.com/jarcoal/httpmock v1.0.7 // indirect
 	github.com/jmespath/go-jmespath v0.4.0 // indirect
 	github.com/json-iterator/go v1.1.10 // indirect
@@ -63,8 +64,8 @@ require (
 	github.com/liquidweb/go-lwApi v0.0.5 // indirect
 	github.com/liquidweb/liquidweb-cli v0.6.9 // indirect
 	github.com/liquidweb/liquidweb-go v1.6.3 // indirect
-	github.com/mattn/go-colorable v0.1.8 // indirect
-	github.com/mattn/go-isatty v0.0.12 // indirect
+	github.com/mattn/go-colorable v0.1.13 // indirect
+	github.com/mattn/go-isatty v0.0.20 // indirect
 	github.com/miekg/dns v1.1.40 // indirect
 	github.com/mitchellh/go-homedir v1.1.0 // indirect
 	github.com/mitchellh/mapstructure v1.4.1 // indirect
@@ -85,17 +86,19 @@ require (
 	github.com/sacloud/libsacloud v1.36.2 // indirect
 	github.com/sirupsen/logrus v1.7.0 // indirect
 	github.com/spf13/cast v1.3.1 // indirect
+	github.com/spf13/pflag v1.0.5 // indirect
 	github.com/stretchr/objx v0.5.0 // indirect
 	github.com/stretchr/testify v1.8.1 // indirect
 	github.com/transip/gotransip/v6 v6.6.0 // indirect
 	github.com/vultr/govultr/v2 v2.4.0 // indirect
 	go.opencensus.io v0.22.5 // indirect
+	go.uber.org/multierr v1.10.0 // indirect
 	go.uber.org/ratelimit v0.1.0 // indirect
-	golang.org/x/crypto v0.0.0-20201221181555-eec23a3978ad // indirect
-	golang.org/x/net v0.0.0-20210220033124-5f55cee0dc0d // indirect
+	golang.org/x/crypto v0.15.0 // indirect
+	golang.org/x/net v0.10.0 // indirect
 	golang.org/x/oauth2 v0.0.0-20210113205817-d3ed898aa8a3 // indirect
-	golang.org/x/sys v0.0.0-20210119212857-b64e53b001e4 // indirect
-	golang.org/x/text v0.3.5 // indirect
+	golang.org/x/sys v0.14.0 // indirect
+	golang.org/x/text v0.14.0 // indirect
 	golang.org/x/time v0.0.0-20201208040808-7e3f01d25324 // indirect
 	google.golang.org/api v0.36.0 // indirect
 	google.golang.org/appengine v1.6.7 // indirect
@@ -105,14 +108,16 @@ require (
 	gopkg.in/ini.v1 v1.62.0 // indirect
 	gopkg.in/ns1/ns1-go.v2 v2.4.4 // indirect
 	gopkg.in/square/go-jose.v2 v2.5.1 // indirect
-	gopkg.in/yaml.v2 v2.4.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
 
 require (
 	github.com/foomo/simplecert v1.8.7
+	github.com/hashicorp/errwrap v1.0.0 // indirect
 	github.com/hokaccha/go-prettyjson v0.0.0-20211117102719-0474bc63780f
 	github.com/jodydadescott/jody-go-logger v0.1.2
 	github.com/jodydadescott/simple-go-hash-auth v0.1.0
-	go.uber.org/multierr v1.10.0 // indirect
+	github.com/spf13/cobra v1.8.0
+	go.uber.org/zap v1.26.0
+	gopkg.in/yaml.v2 v2.4.0
 )

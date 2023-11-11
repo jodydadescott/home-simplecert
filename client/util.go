@@ -6,7 +6,16 @@ import (
 )
 
 func getOS() OSType {
-	return OSTypeFromString(runtime.GOOS)
+
+	osType := OSTypeFromString(runtime.GOOS)
+
+	if osType == OSTypeLinux {
+		if fileExist(synologyProcFile) {
+			osType = OSTypeSynology
+		}
+	}
+
+	return osType
 }
 
 func fileExist(filename string) bool {

@@ -26,7 +26,7 @@ type Client struct {
 func New(config *Config) (*Client, error) {
 
 	if config == nil {
-		panic("config is nil")
+		return nil, fmt.Errorf("config is required")
 	}
 
 	config = config.Clone()
@@ -45,12 +45,14 @@ func New(config *Config) (*Client, error) {
 			return fmt.Errorf("each domain must have a name")
 		}
 
-		if domain.CertFile == "" {
-			return fmt.Errorf("domain %s must have a certFile", domain.Name)
+		if domain.CertFile == "" && domain.FullChain == "" && domain.Keystore == nil {
+			return fmt.Errorf("Domain %s: one or more of the following is required: CertFile, FullChain, Keystore", domain.Name)
 		}
 
-		if domain.KeyFile == "" {
-			return fmt.Errorf("domain %s must have a keyFile", domain.Name)
+		if domain.Keystore != nil {
+			if domain.Keystore.File == "" && domain.Keystore.Secret == "" {
+				return fmt.Errorf("Domain %s: if Keystore is set then both File and Secret must be set", domain.Name)
+			}
 		}
 
 		return nil
@@ -74,7 +76,7 @@ func New(config *Config) (*Client, error) {
 
 		domainsLen := len(config.Domains)
 
-		if domainsLen >= 0 {
+		if domainsLen <= 0 {
 			return fmt.Errorf("Missing Domain")
 		}
 
@@ -89,18 +91,28 @@ func New(config *Config) (*Client, error) {
 		}
 
 		if domain.CertFile != "" {
-			zap.L().Debug(fmt.Sprintf("Domain %s for synology client has certFile set; it will be ignored", domain.Name))
+			zap.L().Debug(fmt.Sprintf("Domain %s: Synology client has CertFile set; it will be ignored", domain.Name))
 			domain.CertFile = ""
 		}
 
 		if domain.KeyFile != "" {
-			zap.L().Debug(fmt.Sprintf("Domain %s for synology client has keyFile set; it will be ignored", domain.Name))
+			zap.L().Debug(fmt.Sprintf("Domain %s: Synology client has KeyFile set; it will be ignored", domain.Name))
 			domain.KeyFile = ""
 		}
 
 		if domain.FullChain != "" {
-			zap.L().Debug(fmt.Sprintf("Domain %s for synology client has fullChain set; it will be ignored", domain.Name))
+			zap.L().Debug(fmt.Sprintf("Domain %s: Synology client has FullChain set; it will be ignored", domain.Name))
 			domain.FullChain = ""
+		}
+
+		if domain.Keystore != nil {
+			zap.L().Debug(fmt.Sprintf("Domain %s: Synology client has Keystore set; it will be ignored", domain.Name))
+			domain.Keystore = nil
+		}
+
+		if domain.Hook != nil {
+			zap.L().Debug(fmt.Sprintf("Domain %s: Synology client has a Hook; it will be ignored", domain.Name))
+			domain.Hook = nil
 		}
 
 		return nil
@@ -143,6 +155,31 @@ func New(config *Config) (*Client, error) {
 
 func (t *Client) Run(ctx context.Context) error {
 
+	execCmd := func(name string, args []string) error {
+
+		logname := name
+		for _, s := range args {
+			logname = logname + " " + s
+		}
+
+		if logger.Trace {
+			zap.L().Debug(fmt.Sprintf("Executing cmd %s", logname))
+		}
+
+		cmd := exec.Command(name, args...)
+		rawoutput, err := cmd.CombinedOutput()
+		output := strings.ReplaceAll(string(rawoutput), "\n", "")
+
+		if err == nil {
+			if logger.Trace {
+				zap.L().Debug(fmt.Sprintf("cmd %s returned output: ", output))
+			}
+			return nil
+		}
+
+		return fmt.Errorf("Executing cmd %s returned error: %w", logname, err)
+	}
+
 	compare := func(file string, abytes []byte) bool {
 
 		if !fileExist(file) {
@@ -157,88 +194,217 @@ func (t *Client) Run(ctx context.Context) error {
 		return bytes.Equal(abytes, bbytes)
 	}
 
-	changed := func(domain *Domain, cert *CR) bool {
-
-		result := false
-
-		if compare(domain.CertFile, cert.GetCertPEM()) {
+	_tmpdir := ""
+	defer func() {
+		if _tmpdir != "" {
+			os.RemoveAll(_tmpdir)
 			if logger.Trace {
-				zap.L().Debug(fmt.Sprintf("Domain %s CertFile unchanged", domain.Name))
-			}
-		} else {
-			result = true
-			if logger.Trace {
-				zap.L().Debug(fmt.Sprintf("Domain %s CertFile changed", domain.Name))
+				zap.L().Debug(fmt.Sprintf("removed tmp dir %s", _tmpdir))
 			}
 		}
+	}()
 
-		if compare(domain.KeyFile, cert.GetKeyPEM()) {
+	tmpdir := func() string {
+		if _tmpdir == "" {
+			_tmpdir = os.TempDir()
+
 			if logger.Trace {
-				zap.L().Debug(fmt.Sprintf("Domain %s KeyFile unchanged", domain.Name))
-			}
-		} else {
-			result = true
-			if logger.Trace {
-				zap.L().Debug(fmt.Sprintf("Domain %s KeyFile changed", domain.Name))
+				zap.L().Debug(fmt.Sprintf("created tmp dir %s", _tmpdir))
 			}
 		}
+		return _tmpdir
+	}
 
-		return result
+	makeKeystore := func(pass string, data []byte) ([]byte, error) {
+
+		// openssl pkcs12 -export -out cache/fullchain.pkcs12 -in cache/fullchain  -passout pass:openhab
+
+		tmp := tmpdir()
+
+		inputFile := filepath.Join(tmp, "pem_input")
+		outputFile := filepath.Join(tmp, "pkcs12_output")
+
+		err := os.WriteFile(inputFile, data, filePerm)
+		if err != nil {
+			return nil, fmt.Errorf("makeKeystore error: %w", err)
+		}
+
+		args := []string{"pkcs12", "-export", "-out", outputFile, "-in", inputFile, "-passout", fmt.Sprintf("pass:%s", pass)}
+
+		err = execCmd("openssl", args)
+		if err != nil {
+			return nil, err
+		}
+
+		result, err := os.ReadFile(outputFile)
+		if err != nil {
+			return nil, fmt.Errorf("makeKeystore error: %w", err)
+		}
+
+		return result, nil
+	}
+
+	writeFile := func(name string, data []byte) error {
+		err := os.MkdirAll(filepath.Dir(name), dirPerm)
+		if err != nil {
+			return fmt.Errorf("error creating cert directory %s; %w", filepath.Dir(name), err)
+		}
+
+		err = os.WriteFile(name, data, filePerm)
+		if err != nil {
+			return fmt.Errorf("error writing %s; %w", name, err)
+		}
+		return nil
 	}
 
 	process := func(domain *Domain, cert *CR) error {
 
-		zap.L().Debug(fmt.Sprintf("Processing domain %s", domain.Name))
+		result := false
 
-		err := os.MkdirAll(filepath.Dir(domain.CertFile), dirPerm)
-		if err != nil {
-			return fmt.Errorf("error creating cert directory %s; %w", filepath.Dir(domain.CertFile), err)
+		if domain.KeyFile != "" {
+
+			if logger.Trace {
+				zap.L().Debug(fmt.Sprintf("Domain %s: has KeyFile", domain.Name))
+			}
+
+			data := cert.GetKeyPEM()
+
+			if !compare(domain.KeyFile, data) {
+
+				result = true
+				if logger.Trace {
+					zap.L().Debug(fmt.Sprintf("Domain %s: KeyFile changed", domain.Name))
+				}
+
+				err := writeFile(domain.KeyFile, data)
+				if err != nil {
+					return err
+				}
+
+			} else {
+				if logger.Trace {
+					zap.L().Debug(fmt.Sprintf("Domain %s: KeyFile unchanged", domain.Name))
+				}
+			}
+		} else {
+			if logger.Trace {
+				zap.L().Debug(fmt.Sprintf("Domain %s: does not have KeyFile", domain.Name))
+			}
 		}
 
-		err = os.WriteFile(domain.CertFile, cert.GetCertPEM(), filePerm)
-		if err != nil {
-			return fmt.Errorf("error writing cert file %s; %w", domain.CertFile, err)
-		}
+		if domain.CertFile != "" {
 
-		err = os.MkdirAll(filepath.Dir(domain.KeyFile), dirPerm)
-		if err != nil {
-			return err
-		}
+			if logger.Trace {
+				zap.L().Debug(fmt.Sprintf("Domain %s: has CertFile", domain.Name))
+			}
 
-		err = os.WriteFile(domain.KeyFile, cert.GetKeyPEM(), filePerm)
-		if err != nil {
-			return fmt.Errorf("error writing key file %s; %w", domain.KeyFile, err)
+			data := cert.GetCertPEM()
+
+			if !compare(domain.CertFile, data) {
+
+				result = true
+				if logger.Trace {
+					zap.L().Debug(fmt.Sprintf("Domain %s: CertFile changed", domain.Name))
+				}
+
+				err := writeFile(domain.CertFile, data)
+				if err != nil {
+					return err
+				}
+
+			} else {
+				if logger.Trace {
+					zap.L().Debug(fmt.Sprintf("Domain %s: CertFile unchanged", domain.Name))
+				}
+			}
+		} else {
+			if logger.Trace {
+				zap.L().Debug(fmt.Sprintf("Domain %s: does not have CertFile", domain.Name))
+			}
 		}
 
 		if domain.FullChain != "" {
 
-			err := os.MkdirAll(filepath.Dir(domain.CertFile), dirPerm)
-			if err != nil {
-				return fmt.Errorf("error creating fullChain directory %s; %w", filepath.Dir(domain.FullChain), err)
+			if logger.Trace {
+				zap.L().Debug(fmt.Sprintf("Domain %s: has FullChain", domain.Name))
 			}
 
-			err = os.WriteFile(domain.FullChain, cert.GetCertPEM(), filePerm)
-			if err != nil {
-				return fmt.Errorf("error writing fullChain file %s; %w", domain.FullChain, err)
+			data := cert.GetCertPEM()
+
+			if !compare(domain.FullChain, data) {
+
+				result = true
+				if logger.Trace {
+					zap.L().Debug(fmt.Sprintf("Domain %s: FullChain changed", domain.Name))
+				}
+
+				err := writeFile(domain.FullChain, data)
+				if err != nil {
+					return err
+				}
+
+			} else {
+				if logger.Trace {
+					zap.L().Debug(fmt.Sprintf("Domain %s: FullChain unchanged", domain.Name))
+				}
+			}
+		} else {
+			if logger.Trace {
+				zap.L().Debug(fmt.Sprintf("Domain %s: does not have FullChain", domain.Name))
 			}
 		}
 
-		if domain.Hook == nil {
-			zap.L().Debug(fmt.Sprintf("Hook config not present for domain %s", domain.Name))
-			return nil
+		if domain.Keystore != nil {
+
+			if logger.Trace {
+				zap.L().Debug(fmt.Sprintf("Domain %s: has Keystore", domain.Name))
+			}
+
+			data := cert.GetCertPEM()
+			data = append(data, cert.GetKeyPEM()...)
+
+			keystore, err := makeKeystore(domain.Keystore.Secret, data)
+			if err != nil {
+				return err
+			}
+
+			if !compare(domain.Keystore.File, keystore) {
+
+				result = true
+				if logger.Trace {
+					zap.L().Debug(fmt.Sprintf("Domain %s: Keystore changed", domain.Name))
+				}
+
+				err := writeFile(domain.Keystore.File, keystore)
+				if err != nil {
+					return err
+				}
+
+			} else {
+				if logger.Trace {
+					zap.L().Debug(fmt.Sprintf("Domain %s: Keystore unchanged", domain.Name))
+				}
+			}
 		}
 
-		zap.L().Debug(fmt.Sprintf("Running Hook for domain %s", domain.Name))
-		cmd := exec.Command(domain.Hook.Name, domain.Hook.Args...)
-		rawoutput, err := cmd.CombinedOutput()
-		output := strings.ReplaceAll(string(rawoutput), "\n", "")
+		if result {
 
-		if err != nil {
-			return fmt.Errorf("Command '%s' for Domain %s returned output %s and error %w", domain.Hook.GetCmd(), domain.Name, output, err)
+			if logger.Trace {
+				zap.L().Debug(fmt.Sprintf("Domain %s: changed", domain.Name))
+			}
+
+			if domain.Hook == nil {
+				if logger.Trace {
+					zap.L().Debug(fmt.Sprintf("Domain %s: no hook present", domain.Name))
+				}
+				return nil
+			}
+			zap.L().Debug(fmt.Sprintf("Domain %s: calling hook", domain.Name))
+			return execCmd(domain.Hook.Name, domain.Hook.Args)
 		}
 
 		if logger.Trace {
-			zap.L().Debug(fmt.Sprintf("Command '%s' for Domain %s returned output %s", domain.Hook.GetCmd(), domain.Name, output))
+			zap.L().Debug(fmt.Sprintf("Domain %s: unchanged", domain.Name))
 		}
 
 		return nil
@@ -258,12 +424,10 @@ func (t *Client) Run(ctx context.Context) error {
 				continue
 			}
 
-			if changed(domain, cert) {
-				err = process(domain, cert)
-				if err != nil {
-					errs = multierror.Append(errs, fmt.Errorf("Domain %s %w", domain.Name, err))
-					continue
-				}
+			err = process(domain, cert)
+			if err != nil {
+				errs = multierror.Append(errs, fmt.Errorf("Domain %s %w", domain.Name, err))
+				continue
 			}
 
 		}
@@ -346,17 +510,13 @@ func (t *Client) Run(ctx context.Context) error {
 			return err
 		}
 
-		if changed(domain, cert) {
-			err = process(domain, cert)
-			if err != nil {
-				return err
-			}
-		}
-
-		return nil
+		return process(domain, cert)
 	}
 
-	defer t.client.Shutdown()
+	defer func() {
+		t.client.Shutdown()
+		zap.L().Debug("Shutting down Client")
+	}()
 
 	switch t.osType {
 

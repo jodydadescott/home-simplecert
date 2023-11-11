@@ -64,14 +64,32 @@ func getExampleConfigCmd(use string, config *Config) *cobra.Command {
 	return cmd
 }
 
+func getClientConfigCmd() *cobra.Command {
+
+	cmd := &cobra.Command{
+		Use: "client",
+	}
+
+	normal := exampleConfig()
+	normal.Client = client.ExampleConfig()
+
+	synology := exampleConfig()
+	synology.Client = client.ExampleSynologyConfig()
+
+	cmd.AddCommand(getExampleConfigCmd("normal", normal), getExampleConfigCmd("synology", synology))
+	return cmd
+}
+
 func getConfigCmd() *cobra.Command {
 
 	cmd := &cobra.Command{
 		Use: "config",
 	}
 
-	cmd.AddCommand(getExampleConfigCmd("client", ExampleClientConfig()), getExampleConfigCmd("server", ExampleServerConfig()))
+	serverConfig := exampleConfig()
+	serverConfig.Server = server.ExampleConfig()
 
+	cmd.AddCommand(getClientConfigCmd(), getExampleConfigCmd("server", serverConfig))
 	return cmd
 }
 

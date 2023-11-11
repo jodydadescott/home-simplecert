@@ -3,14 +3,13 @@ package client
 func ExampleConfig() *Config {
 
 	refreshedHook := &Hook{
-		Name: "echo",
+		Name: "systemctl",
 	}
 
-	refreshedHook.AddArgs("touch")
-	refreshedHook.AddArgs("/tmp/refreshed")
+	refreshedHook.AddArgs("restart", "nginx")
 
 	c := &Config{
-		Notes:           "RefreshInterval is optional. It is only used if daemon=true. Setting a PreHook with the FailOnErr will cause the domain fetch to stop. If running in daemon mode it will remain running. Setting FailOnErr on a PostHook will have not effect",
+		Notes:           "RefreshInterval is optional. It is only used if daemon is set to true.",
 		Secret:          "the secret",
 		Server:          "https://...",
 		RefreshInterval: defaultRefreshInterval,
@@ -31,7 +30,15 @@ func ExampleConfig() *Config {
 		KeyFile:  "/path/to/keyfile2.pem",
 	}
 
-	c.AddDomain(domain1, domain2)
+	domain3 := &Domain{
+		Name: "example3.com",
+		Keystore: &Keystore{
+			File:   "/path/to/keystore",
+			Secret: "keystore_secret",
+		},
+	}
+
+	c.AddDomain(domain1, domain2, domain3)
 	return c
 }
 
@@ -42,9 +49,8 @@ func ExampleSynologyConfig() *Config {
 	}
 
 	c := &Config{
-		Secret:     "the secret",
-		Server:     "https://...",
-		SkipVerify: false,
+		Secret: "the secret",
+		Server: "https://...",
 	}
 
 	c.AddDomain(domain)

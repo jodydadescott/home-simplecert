@@ -19,7 +19,7 @@ type Config struct {
 	Domains         []*Domain     `json:"domains,omitempty" yaml:"domains,omitempty"`
 	RefreshInterval time.Duration `json:"refreshInterval,omitempty" yaml:"refreshInterval,omitempty"`
 	Daemon          bool          `json:"daemon,omitempty" yaml:"daemon,omitempty"`
-	IgnoreOSType    bool          `json:"ignoreOSType,omitempty" yaml:"ignoreOSType,omitempty"`
+	IgnoreOSType    bool          `json:"ignoreOSType" yaml:"ignoreOSType"`
 }
 
 // Clone return copy
@@ -36,11 +36,12 @@ func (t *Config) AddDomain(domains ...*Domain) *Config {
 }
 
 type Domain struct {
-	Name      string `json:"name" yaml:"name"`
-	KeyFile   string `json:"keyFile" yaml:"keyFile"`
-	CertFile  string `json:"certFile" yaml:"certFile"`
-	FullChain string `json:"fullChain" yaml:"fullChain"`
-	Hook      *Hook  `json:"hook,omitempty" yaml:"hook,omitempty"`
+	Name      string    `json:"name,omitempty" yaml:"name,omitempty"`
+	KeyFile   string    `json:"keyFile,omitempty" yaml:"keyFile,omitempty"`
+	CertFile  string    `json:"certFile,omitempty" yaml:"certFile,omitempty"`
+	FullChain string    `json:"fullChain,omitempty" yaml:"fullChain,omitempty"`
+	Hook      *Hook     `json:"hook,omitempty" yaml:"hook,omitempty"`
+	Keystore  *Keystore `json:"keystore,omitempty" yaml:"keystore,omitempty"`
 }
 
 // Clone return copy
@@ -53,6 +54,18 @@ func (t *Domain) Clone() *Domain {
 type Hook struct {
 	Name string   `json:"name" yaml:"name"`
 	Args []string `json:"args,omitempty" yaml:"args,omitempty"`
+}
+
+type Keystore struct {
+	File   string `json:"file,omitempty" yaml:"file,omitempty"`
+	Secret string `json:"secret,omitempty" yaml:"secret,omitempty"`
+}
+
+// Clone return copy
+func (t *Keystore) Clone() *Keystore {
+	c := &Keystore{}
+	copier.Copy(&c, &t)
+	return c
 }
 
 // Clone return copy
