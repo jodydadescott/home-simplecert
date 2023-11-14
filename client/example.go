@@ -9,10 +9,10 @@ func ExampleConfig() *Config {
 	refreshedHook.AddArgs("restart", "nginx")
 
 	c := &Config{
-		Notes:           "RefreshInterval is optional. It is only used if daemon is set to true.",
+		Notes:           ConfigNotes,
 		Secret:          "the secret",
 		Server:          "https://...",
-		RefreshInterval: defaultRefreshInterval,
+		RefreshInterval: DefaultRefreshInterval,
 		Daemon:          true,
 		SkipVerify:      false,
 	}
@@ -30,30 +30,6 @@ func ExampleConfig() *Config {
 		KeyFile:  "/path/to/keyfile2.pem",
 	}
 
-	domain3 := &Domain{
-		Name: "example3.com",
-		Keystore: &Keystore{
-			File:   "/path/to/keystore",
-			Secret: "keystore_secret",
-		},
-	}
-
-	c.AddDomain(domain1, domain2, domain3)
-	return c
-}
-
-func ExampleSynologyConfig() *Config {
-
-	domain := &Domain{
-		Name: "example1.com",
-	}
-
-	c := &Config{
-		Secret: "the secret",
-		Server: "https://...",
-	}
-
-	c.AddDomain(domain)
-
+	c.AddDomain(domain1, domain2)
 	return c
 }

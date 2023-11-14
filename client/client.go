@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"time"
 
@@ -15,6 +16,8 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/jodydadescott/home-simplecert/libclient"
+	"github.com/jodydadescott/home-simplecert/types"
+	"github.com/jodydadescott/home-simplecert/util"
 )
 
 type Client struct {
@@ -45,14 +48,12 @@ func New(config *Config) (*Client, error) {
 			return fmt.Errorf("each domain must have a name")
 		}
 
-		if domain.CertFile == "" && domain.FullChain == "" && domain.Keystore == nil {
-			return fmt.Errorf("Domain %s: one or more of the following is required: CertFile, FullChain, Keystore", domain.Name)
+		if domain.CertFile == "" && domain.FullChain == "" {
+			return fmt.Errorf("domain %s: one or both of the following is required: CertFile, FullChain", domain.Name)
 		}
 
-		if domain.Keystore != nil {
-			if domain.Keystore.File == "" && domain.Keystore.Secret == "" {
-				return fmt.Errorf("Domain %s: if Keystore is set then both File and Secret must be set", domain.Name)
-			}
+		if domain.KeyFile == "" {
+			return fmt.Errorf("domain %s: KeyFile is required", domain.Name)
 		}
 
 		return nil
@@ -77,11 +78,11 @@ func New(config *Config) (*Client, error) {
 		domainsLen := len(config.Domains)
 
 		if domainsLen <= 0 {
-			return fmt.Errorf("Missing Domain")
+			return fmt.Errorf("missing Domain")
 		}
 
 		if domainsLen > 1 {
-			return fmt.Errorf("There are %d domains in the configuration and there should only be 1", domainsLen)
+			return fmt.Errorf("there are %d domains in the configuration and there should only be 1", domainsLen)
 		}
 
 		domain := config.Domains[0]
@@ -92,30 +93,110 @@ func New(config *Config) (*Client, error) {
 
 		if domain.CertFile != "" {
 			zap.L().Debug(fmt.Sprintf("Domain %s: Synology client has CertFile set; it will be ignored", domain.Name))
-			domain.CertFile = ""
 		}
 
 		if domain.KeyFile != "" {
 			zap.L().Debug(fmt.Sprintf("Domain %s: Synology client has KeyFile set; it will be ignored", domain.Name))
-			domain.KeyFile = ""
 		}
 
 		if domain.FullChain != "" {
 			zap.L().Debug(fmt.Sprintf("Domain %s: Synology client has FullChain set; it will be ignored", domain.Name))
-			domain.FullChain = ""
-		}
-
-		if domain.Keystore != nil {
-			zap.L().Debug(fmt.Sprintf("Domain %s: Synology client has Keystore set; it will be ignored", domain.Name))
-			domain.Keystore = nil
 		}
 
 		if domain.Hook != nil {
 			zap.L().Debug(fmt.Sprintf("Domain %s: Synology client has a Hook; it will be ignored", domain.Name))
+		}
+
+		b, err := os.ReadFile(SynologyDefaultFile)
+		if err != nil {
+			return err
+		}
+
+		cerFile := strings.ReplaceAll(string(b), "\n", "")
+		certDir := filepath.Join(filepath.Dir(SynologyDefaultFile), cerFile)
+
+		domain.Hook = &Hook{
+			Name: "systemctl",
+		}
+		domain.Hook.AddArgs("restart", "nginx.service")
+
+		domain.CertFile = filepath.Join(certDir, SynologyCertFile)
+		domain.KeyFile = filepath.Join(certDir, SynologyKeyFile)
+		domain.FullChain = filepath.Join(certDir, SynologyChainFile)
+
+		return nil
+	}
+
+	processUnifiDomains := func() error {
+
+		domainsLen := len(config.Domains)
+
+		if domainsLen <= 0 {
+			return fmt.Errorf("missing Domain")
+		}
+
+		if domainsLen > 1 {
+			return fmt.Errorf("there are %d domains in the configuration and there should only be 1", domainsLen)
+		}
+
+		domain := config.Domains[0]
+
+		if domain.Name == "" {
+			return fmt.Errorf("domain must have a name")
+		}
+
+		if domain.CertFile != "" {
+			zap.L().Debug(fmt.Sprintf("Domain %s: Unifi client has CertFile set; it will be ignored", domain.Name))
+		}
+
+		if domain.KeyFile != "" {
+			zap.L().Debug(fmt.Sprintf("Domain %s: Unifi client has KeyFile set; it will be ignored", domain.Name))
+			domain.KeyFile = ""
+		}
+
+		if domain.FullChain != "" {
+			zap.L().Debug(fmt.Sprintf("Domain %s: Unifi client has FullChain set; it will be ignored", domain.Name))
+			domain.FullChain = ""
+		}
+
+		if domain.Hook != nil {
+			zap.L().Debug(fmt.Sprintf("Domain %s: Unifi client has a Hook; it will be ignored", domain.Name))
 			domain.Hook = nil
 		}
 
+		domain.CertFile = UnifiCertFile
+		domain.KeyFile = UnifiKeyFile
+
+		domain.Hook = &Hook{
+			Name: "systemctl",
+		}
+		domain.Hook.AddArgs("restart", "unifi-core.service")
+
 		return nil
+	}
+
+	getOS := func() OSType {
+
+		osType := OSTypeFromString(runtime.GOOS)
+
+		if osType == OSTypeLinux {
+			if util.FileExist(DetectSynologyFile) {
+				osType = OSTypeSynology
+			}
+		}
+
+		if osType == OSTypeLinux {
+			if util.FileExist(DetectSynologyFile) {
+				return OSTypeSynology
+			}
+
+			if util.FileExist(DetectUnifiFile) {
+				return OSTypeUnifi
+			}
+
+		}
+
+		return osType
 	}
 
 	osType := getOS()
@@ -131,6 +212,16 @@ func New(config *Config) (*Client, error) {
 
 	case OSTypeSynology:
 		err := processSynologyDomains()
+		if err != nil {
+			return nil, err
+		}
+		if config.Daemon {
+			zap.L().Debug("Daemon is set to true on OSType Synology; it will be ignored")
+			config.Daemon = false
+		}
+
+	case OSTypeUnifi:
+		err := processUnifiDomains()
 		if err != nil {
 			return nil, err
 		}
@@ -177,12 +268,12 @@ func (t *Client) Run(ctx context.Context) error {
 			return nil
 		}
 
-		return fmt.Errorf("Executing cmd %s returned error: %w", logname, err)
+		return fmt.Errorf("executing cmd %s returned error: %w", logname, err)
 	}
 
 	compare := func(file string, abytes []byte) bool {
 
-		if !fileExist(file) {
+		if !util.FileExist(file) {
 			return false
 		}
 
@@ -194,63 +285,13 @@ func (t *Client) Run(ctx context.Context) error {
 		return bytes.Equal(abytes, bbytes)
 	}
 
-	_tmpdir := ""
-	defer func() {
-		if _tmpdir != "" {
-			os.RemoveAll(_tmpdir)
-			if logger.Trace {
-				zap.L().Debug(fmt.Sprintf("removed tmp dir %s", _tmpdir))
-			}
-		}
-	}()
-
-	tmpdir := func() string {
-		if _tmpdir == "" {
-			_tmpdir = os.TempDir()
-
-			if logger.Trace {
-				zap.L().Debug(fmt.Sprintf("created tmp dir %s", _tmpdir))
-			}
-		}
-		return _tmpdir
-	}
-
-	makeKeystore := func(pass string, data []byte) ([]byte, error) {
-
-		// openssl pkcs12 -export -out cache/fullchain.pkcs12 -in cache/fullchain  -passout pass:openhab
-
-		tmp := tmpdir()
-
-		inputFile := filepath.Join(tmp, "pem_input")
-		outputFile := filepath.Join(tmp, "pkcs12_output")
-
-		err := os.WriteFile(inputFile, data, filePerm)
-		if err != nil {
-			return nil, fmt.Errorf("makeKeystore error: %w", err)
-		}
-
-		args := []string{"pkcs12", "-export", "-out", outputFile, "-in", inputFile, "-passout", fmt.Sprintf("pass:%s", pass)}
-
-		err = execCmd("openssl", args)
-		if err != nil {
-			return nil, err
-		}
-
-		result, err := os.ReadFile(outputFile)
-		if err != nil {
-			return nil, fmt.Errorf("makeKeystore error: %w", err)
-		}
-
-		return result, nil
-	}
-
 	writeFile := func(name string, data []byte) error {
-		err := os.MkdirAll(filepath.Dir(name), dirPerm)
+		err := os.MkdirAll(filepath.Dir(name), types.DirPerm)
 		if err != nil {
 			return fmt.Errorf("error creating cert directory %s; %w", filepath.Dir(name), err)
 		}
 
-		err = os.WriteFile(name, data, filePerm)
+		err = os.WriteFile(name, data, types.FilePerm)
 		if err != nil {
 			return fmt.Errorf("error writing %s; %w", name, err)
 		}
@@ -354,58 +395,19 @@ func (t *Client) Run(ctx context.Context) error {
 			}
 		}
 
-		if domain.Keystore != nil {
-
-			if logger.Trace {
-				zap.L().Debug(fmt.Sprintf("Domain %s: has Keystore", domain.Name))
-			}
-
-			data := cert.GetCertPEM()
-			data = append(data, cert.GetKeyPEM()...)
-
-			keystore, err := makeKeystore(domain.Keystore.Secret, data)
-			if err != nil {
-				return err
-			}
-
-			if !compare(domain.Keystore.File, keystore) {
-
-				result = true
-				if logger.Trace {
-					zap.L().Debug(fmt.Sprintf("Domain %s: Keystore changed", domain.Name))
-				}
-
-				err := writeFile(domain.Keystore.File, keystore)
-				if err != nil {
-					return err
-				}
-
-			} else {
-				if logger.Trace {
-					zap.L().Debug(fmt.Sprintf("Domain %s: Keystore unchanged", domain.Name))
-				}
-			}
-		}
-
 		if result {
 
-			if logger.Trace {
-				zap.L().Debug(fmt.Sprintf("Domain %s: changed", domain.Name))
-			}
-
 			if domain.Hook == nil {
-				if logger.Trace {
-					zap.L().Debug(fmt.Sprintf("Domain %s: no hook present", domain.Name))
-				}
+				zap.L().Info(fmt.Sprintf("Domain %s: changed; no hook configured", domain.Name))
 				return nil
 			}
-			zap.L().Debug(fmt.Sprintf("Domain %s: calling hook", domain.Name))
+
+			zap.L().Info(fmt.Sprintf("Domain %s: changed; executing hook", domain.Name))
+
 			return execCmd(domain.Hook.Name, domain.Hook.Args)
 		}
 
-		if logger.Trace {
-			zap.L().Debug(fmt.Sprintf("Domain %s: unchanged", domain.Name))
-		}
+		zap.L().Info(fmt.Sprintf("Domain %s: unchanged", domain.Name))
 
 		return nil
 	}
@@ -455,7 +457,7 @@ func (t *Client) Run(ctx context.Context) error {
 		if refreshInterval > 0 {
 			zap.L().Debug(fmt.Sprintf("Refresh Interval is %s (config)", refreshInterval.String()))
 		} else {
-			refreshInterval = defaultRefreshInterval
+			refreshInterval = DefaultRefreshInterval
 			zap.L().Debug(fmt.Sprintf("Refresh Interval is %s (default)", refreshInterval.String()))
 		}
 
@@ -480,56 +482,19 @@ func (t *Client) Run(ctx context.Context) error {
 
 	}
 
-	runSynologyMode := func() error {
-
-		domain := t.config.Domains[0]
-
-		if domain == nil {
-			panic("this should not happen")
-		}
-
-		b, err := os.ReadFile(synologyDefaultFile)
-		if err != nil {
-			return err
-		}
-
-		cerFile := strings.ReplaceAll(string(b), "\n", "")
-		certDir := filepath.Join(filepath.Dir(synologyDefaultFile), cerFile)
-
-		hook := &Hook{
-			Name: "systemctl",
-		}
-		hook.AddArgs("restart", "nginx.service")
-
-		domain.CertFile = filepath.Join(certDir, synologyCertFile)
-		domain.KeyFile = filepath.Join(certDir, synologyKeyFile)
-		domain.FullChain = filepath.Join(certDir, synologyChainFile)
-
-		cert, err := t.client.GetCert(domain.Name)
-		if err != nil {
-			return err
-		}
-
-		return process(domain, cert)
-	}
+	zap.L().Debug("Client is now running")
 
 	defer func() {
 		t.client.Shutdown()
-		zap.L().Debug("Shutting down Client")
+		zap.L().Debug("Client is shutting down")
 	}()
-
-	switch t.osType {
-
-	case OSTypeSynology:
-		return runSynologyMode()
-
-	}
 
 	if t.config.Daemon {
 		runTick()
 		runDaemon()
 		return nil
 	}
+
 	return run()
 
 }

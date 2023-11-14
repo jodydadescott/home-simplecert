@@ -8,6 +8,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"sync"
 	"time"
 
 	hashauthrand "github.com/jodydadescott/simple-go-hash-auth/rand"
@@ -15,11 +16,13 @@ import (
 )
 
 type Client struct {
+	mutex      sync.Mutex
 	secret     string
 	url        string
 	httpClient *http.Client
 	token      *hashauthserver.Token
 	rand       *hashauthrand.Rand
+	certMap    map[string]*CR
 }
 
 func New(config *Config) *Client {
@@ -37,9 +40,10 @@ func New(config *Config) *Client {
 	}
 
 	return &Client{
-		url:    config.Server,
-		secret: config.Secret,
-		rand:   hashauthrand.New(&hashauthrand.Config{}),
+		url:     config.Server,
+		secret:  config.Secret,
+		rand:    hashauthrand.New(&hashauthrand.Config{}),
+		certMap: make(map[string]*CR),
 		httpClient: &http.Client{Transport: &http.Transport{
 			TLSClientConfig: &tls.Config{InsecureSkipVerify: config.SkipVerify},
 		}},
@@ -53,6 +57,15 @@ func (t *Client) Shutdown() {
 }
 
 func (t *Client) GetCert(domain string) (*CR, error) {
+
+	t.mutex.Lock()
+	defer t.mutex.Unlock()
+
+	cert := t.certMap[domain]
+
+	if cert != nil {
+		return cert, nil
+	}
 
 	token, err := t.getToken()
 	if err != nil {
@@ -100,9 +113,10 @@ func (t *Client) GetCert(domain string) (*CR, error) {
 	}
 
 	if result.CR == nil {
-		return nil, fmt.Errorf("No CR in response")
+		return nil, fmt.Errorf("no CR in response")
 	}
 
+	t.certMap[domain] = result.CR
 	return result.CR, nil
 }
 
@@ -198,11 +212,11 @@ func (t *Client) getToken() (*Token, error) {
 		}
 
 		if result.Token == nil {
-			return fmt.Errorf("No token in response")
+			return fmt.Errorf("no token in response")
 		}
 
 		if isExpired(time.Now().Unix(), result.Token.Exp) {
-			return fmt.Errorf("Token already expired")
+			return fmt.Errorf("token already expired")
 		}
 
 		t.token = result.Token
@@ -219,8 +233,5 @@ func (t *Client) getToken() (*Token, error) {
 }
 
 func isExpired(now, exp int64) bool {
-	if now > exp {
-		return true
-	}
-	return false
+	return now > exp
 }

@@ -1,7 +1,6 @@
 package types
 
 import (
-	"bytes"
 	"net/http"
 	"net/http/httputil"
 
@@ -26,51 +25,6 @@ func (t *CR) Clone() *CR {
 	c := &CR{}
 	copier.Copy(&c, &t)
 	return c
-}
-
-// Clone return copy
-func (t *CR) Equals(x *CR) bool {
-
-	if t == nil {
-		if x == nil {
-			return true
-		}
-		return false
-	}
-
-	if x == nil {
-		return false
-	}
-
-	if t.Domain != x.Domain {
-		return false
-	}
-
-	if t.CertURL != x.CertURL {
-		return false
-	}
-
-	if t.CertStableURL != x.CertStableURL {
-		return false
-	}
-
-	if !bytes.Equal(t.PrivateKey, x.PrivateKey) {
-		return false
-	}
-
-	if !bytes.Equal(t.Certificate, x.Certificate) {
-		return false
-	}
-
-	if !bytes.Equal(t.IssuerCertificate, x.IssuerCertificate) {
-		return false
-	}
-
-	if !bytes.Equal(t.CSR, x.CSR) {
-		return false
-	}
-
-	return true
 }
 
 func (t *CR) initCertResource() {

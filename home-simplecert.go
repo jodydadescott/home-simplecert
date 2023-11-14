@@ -9,9 +9,8 @@ import (
 
 func main() {
 	err := cmd.Execute()
-
 	if err != nil {
-		fmt.Fprintf(os.Stderr, err.Error())
+		fmt.Fprintf(os.Stderr, "Error: %s", err.Error())
 		os.Exit(1)
 	}
 }

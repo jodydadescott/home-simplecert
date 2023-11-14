@@ -5,6 +5,10 @@ import (
 )
 
 const (
-	certFilePerm = os.FileMode(0644)
-	certDirPerm  = os.FileMode(0755)
+	FilePerm       = os.FileMode(0644)
+	DirPerm        = os.FileMode(0755)
+	ExePerm        = os.FileMode(0755)
+	SecureFilePerm = os.FileMode(0400)
+
+	CodeVersion = "1.0.0"
 )

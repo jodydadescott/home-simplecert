@@ -44,7 +44,7 @@ func (t *DomainWrapper) init() error {
 		t.Lock()
 		defer t.Unlock()
 
-		b, err := os.ReadFile(filepath.Join(cacheDir, certResourceFileName))
+		b, err := os.ReadFile(filepath.Join(cacheDir, CertResourceFileName))
 		if err != nil {
 			t.err = err
 			zap.L().Error(fmt.Sprintf("Processing domain %s had error %s", t.Name, err.Error()))
@@ -183,7 +183,7 @@ func New(config *Config) (*Server, error) {
 	}
 
 	if config.CacheDir == "" {
-		config.CacheDir = defaultCacheDir
+		config.CacheDir = DefaultCacheDir
 	}
 
 	s := &Server{
@@ -273,7 +273,7 @@ func (t *Server) Run(ctx context.Context) error {
 	zap.L().Debug("Processing Domains Completed")
 
 	if primaryDomain.err != nil {
-		return fmt.Errorf("Failed to process primary domain; had error %s", primaryDomain.err.Error())
+		return fmt.Errorf("failed to process primary domain; had error %s", primaryDomain.err.Error())
 	}
 
 	liftEmbargo()
@@ -340,7 +340,7 @@ func (t *Server) startServer() {
 
 	go func() {
 		zap.L().Debug("Starting ListenAndServeTLS : blocking")
-		err := httpServer.ListenAndServeTLS(filepath.Join(baseDir, certPemFileName), filepath.Join(baseDir, keyPemFileName))
+		err := httpServer.ListenAndServeTLS(filepath.Join(baseDir, CertPemFileName), filepath.Join(baseDir, KeyPemFileName))
 		zap.L().Debug("Stopping ListenAndServeTLS : not blocking")
 		sendErr(err)
 		cancel()
@@ -401,6 +401,12 @@ func (t *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			response := &TokenResponse{}
 
 			postBytes, err := io.ReadAll(r.Body)
+			if err != nil {
+				response.Error = err.Error()
+				zap.L().Error(err.Error())
+				return response
+			}
+
 			defer r.Body.Close()
 
 			authRequest := &AuthRequest{}
@@ -428,7 +434,7 @@ func (t *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			response := &CertResponse{}
 
 			authHeader := r.Header.Get("Authorization")
-			bearerToken := strings.TrimPrefix(authHeader, prefixBearer)
+			bearerToken := strings.TrimPrefix(authHeader, PrefixBearer)
 			if bearerToken == "" {
 				response.Error = "bearerToken not found"
 				zap.L().Debug("bearerToken not found")
@@ -494,7 +500,6 @@ func (t *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	response := serveHTTP()
 	b, _ := json.Marshal(response)
-	fmt.Fprintf(w, string(b))
 
 	if logger.Wire {
 		httpDebug := types.NewHTTPDebug(r, b)

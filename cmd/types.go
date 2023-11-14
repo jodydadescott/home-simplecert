@@ -15,6 +15,7 @@ type ServerConfig = server.Config
 type ClientConfig = client.Config
 
 type Config struct {
+	Notes  string        `json:"notes,omitempty" yaml:"notes,omitempty"`
 	Logger *Logger       `json:"logger,omitempty" yaml:"logger,omitempty"`
 	Server *ServerConfig `json:"server,omitempty" yaml:"server,omitempty"`
 	Client *ClientConfig `json:"client,omitempty" yaml:"client,omitempty"`

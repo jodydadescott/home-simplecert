@@ -2,9 +2,9 @@ package libclient
 
 import (
 	"github.com/jinzhu/copier"
+	hashauthserver "github.com/jodydadescott/simple-go-hash-auth/server"
 
 	"github.com/jodydadescott/home-simplecert/types"
-	hashauthserver "github.com/jodydadescott/simple-go-hash-auth/server"
 )
 
 type AuthRequest = hashauthserver.AuthRequest

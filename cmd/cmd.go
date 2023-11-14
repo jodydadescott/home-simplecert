@@ -6,7 +6,10 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
+	"path/filepath"
+	"runtime"
 	"strings"
+	"sync"
 
 	"github.com/hashicorp/go-multierror"
 	"github.com/hokaccha/go-prettyjson"
@@ -17,14 +20,29 @@ import (
 
 	"github.com/jodydadescott/home-simplecert/client"
 	"github.com/jodydadescott/home-simplecert/server"
+	"github.com/jodydadescott/home-simplecert/types"
+	"github.com/jodydadescott/home-simplecert/util"
 )
 
-func getExampleConfigCmd(use string, config *Config) *cobra.Command {
+func getExampleConfig() *Config {
+	return &Config{
+		Notes:  ConfigNotes,
+		Server: server.ExampleConfig(),
+		Client: client.ExampleConfig(),
+		Logger: &Logger{
+			LogLevel: logger.DebugLevel,
+		},
+	}
+}
+
+func getExampleConfigCmd() *cobra.Command {
 
 	getConfigCmd := func(format string) *cobra.Command {
 
 		upperFormat := strings.ToUpper(format)
 		lowerFormat := strings.ToLower(format)
+
+		config := getExampleConfig()
 
 		return &cobra.Command{
 			Use:  lowerFormat,
@@ -45,7 +63,7 @@ func getExampleConfigCmd(use string, config *Config) *cobra.Command {
 					o, _ = prettyjson.Marshal(config)
 
 				default:
-					return fmt.Errorf("Supported formats are json, yaml, and pretty-json")
+					return fmt.Errorf("supported formats are json, yaml, and pretty-json")
 
 				}
 
@@ -56,68 +74,12 @@ func getExampleConfigCmd(use string, config *Config) *cobra.Command {
 	}
 
 	cmd := &cobra.Command{
-		Use: use,
+		Use: "config",
 	}
 
 	cmd.AddCommand(getConfigCmd("json"), getConfigCmd("yaml"), getConfigCmd("pretty-json"))
 
 	return cmd
-}
-
-func getClientConfigCmd() *cobra.Command {
-
-	cmd := &cobra.Command{
-		Use: "client",
-	}
-
-	normal := exampleConfig()
-	normal.Client = client.ExampleConfig()
-
-	synology := exampleConfig()
-	synology.Client = client.ExampleSynologyConfig()
-
-	cmd.AddCommand(getExampleConfigCmd("normal", normal), getExampleConfigCmd("synology", synology))
-	return cmd
-}
-
-func getConfigCmd() *cobra.Command {
-
-	cmd := &cobra.Command{
-		Use: "config",
-	}
-
-	serverConfig := exampleConfig()
-	serverConfig.Server = server.ExampleConfig()
-
-	cmd.AddCommand(getClientConfigCmd(), getExampleConfigCmd("server", serverConfig))
-	return cmd
-}
-
-func getClientConfig(configFile string) (*ClientConfig, error) {
-
-	var errs *multierror.Error
-
-	content, err := os.ReadFile(configFile)
-	if err != nil {
-		return nil, err
-	}
-
-	var config ClientConfig
-	err = json.Unmarshal(content, &config)
-	if err == nil {
-		return &config, nil
-	}
-
-	errs = multierror.Append(errs, err)
-
-	err = yaml.Unmarshal(content, &config)
-	if err == nil {
-		return &config, nil
-	}
-
-	errs = multierror.Append(errs, err)
-
-	return nil, errs.ErrorOrNil()
 }
 
 var (
@@ -132,7 +94,76 @@ var (
 		Use:  "version",
 		Long: "Returns the version",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			fmt.Println(CodeVersion)
+			fmt.Println(types.CodeVersion)
+			return nil
+		},
+	}
+
+	installCmd = &cobra.Command{
+		Use:  "install",
+		Long: "installs the binary, config and init files",
+		RunE: func(cmd *cobra.Command, args []string) error {
+
+			installSystemd := func() error {
+
+				binaryFilePath, err := os.Executable()
+				if err != nil {
+					return err
+				}
+
+				if !util.FileExist(SystemdServiceFile) {
+					err = os.WriteFile(SystemdServiceFile, []byte(systemD()), types.SecureFilePerm)
+					if err != nil {
+						return err
+					}
+				}
+
+				if !util.FileExist(DefaultConfigFile) {
+
+					config := getExampleConfig()
+					o, _ := yaml.Marshal(config)
+
+					err = os.WriteFile(DefaultConfigFile, o, types.FilePerm)
+					if err != nil {
+						return err
+					}
+
+					fmt.Fprintf(os.Stderr, "Config file %s was created", DefaultConfigFile)
+				}
+
+				binary, err := os.ReadFile(binaryFilePath)
+				if err != nil {
+					return err
+				}
+
+				err = os.MkdirAll(BinaryInstallPath, types.DirPerm)
+				if err != nil {
+					return err
+				}
+
+				err = os.WriteFile(filepath.Join(BinaryInstallPath, BinaryName), binary, types.ExePerm)
+				if err != nil {
+					return err
+				}
+
+				fmt.Fprintf(os.Stderr, "Installed as a systemd service. Configure the file %s and then run the commands:\n", DefaultConfigFile)
+				fmt.Fprintf(os.Stderr, "systemctl enable home-simplecert && systemctl start home-simplecert\n")
+				return nil
+
+			}
+
+			switch runtime.GOOS {
+
+			case "linux":
+				if util.FileExist("/etc/systemd/system") {
+					return installSystemd()
+				}
+
+			default:
+				return fmt.Errorf("install not supported on OS %s", runtime.GOOS)
+
+			}
+
 			return nil
 		},
 	}
@@ -145,7 +176,19 @@ var (
 
 			getConfig := func(configFile string) (*Config, error) {
 
-				var errs *multierror.Error
+				if !util.FileExist(configFile) {
+					return nil, fmt.Errorf("config file %s does not exist", configFile)
+				}
+
+				fileStats, err := os.Stat(configFile)
+				if err != nil {
+					return nil, err
+				}
+
+				permissions := fileStats.Mode().Perm()
+				if permissions != types.SecureFilePerm {
+					return nil, fmt.Errorf("config file %s has overly promiscuous permissions", configFile)
+				}
 
 				content, err := os.ReadFile(configFile)
 				if err != nil {
@@ -157,6 +200,8 @@ var (
 				if err == nil {
 					return &config, nil
 				}
+
+				var errs *multierror.Error
 
 				errs = multierror.Append(errs, err)
 
@@ -170,24 +215,13 @@ var (
 				return nil, errs.ErrorOrNil()
 			}
 
-			run := func(runner Runner) error {
+			errc := make(chan error, 2)
 
-				ctx, cancel := context.WithCancel(cmd.Context())
+			ctx, cancel := context.WithCancel(cmd.Context())
+			defer cancel()
 
-				interruptChan := make(chan os.Signal, 1)
-				signal.Notify(interruptChan, os.Interrupt)
-
-				go func() {
-					select {
-					case <-interruptChan: // first signal, cancel context
-						cancel()
-					case <-ctx.Done():
-					}
-					<-interruptChan // second signal, hard exit
-				}()
-
-				return runner.Run(ctx)
-			}
+			interruptChan := make(chan os.Signal, 1)
+			signal.Notify(interruptChan, os.Interrupt)
 
 			configFile := configFileArg
 
@@ -197,14 +231,13 @@ var (
 				configFile = os.Getenv(ConfigEnvVar)
 			}
 
-			if configFile != "" {
-				tmpConfig, err := getConfig(configFileArg)
-				if err != nil {
-					return err
-				}
-				config = tmpConfig.Clone()
-			} else {
-				return fmt.Errorf("Config is required")
+			if configFile == "" {
+				configFile = DefaultConfigFile
+			}
+
+			config, err := getConfig(configFile)
+			if err != nil {
+				return err
 			}
 
 			debugLevel := debugLevelArg
@@ -225,27 +258,68 @@ var (
 				logger.SetConfig(config.Logger)
 			}
 
-			if config.Client != nil && config.Server != nil {
-				return fmt.Errorf("Config contains both client and server. It should only contain one or the other")
-			}
+			var clientRunner *client.Client
+			var serverRunner *server.Server
 
 			if config.Client != nil {
-
-				zap.L().Debug("Running Client")
-				runner, err := client.New(config.Client)
+				x, err := client.New(config.Client)
 				if err != nil {
 					return err
 				}
-				return run(runner)
+				clientRunner = x
 			}
 
-			zap.L().Debug("Running Server")
-			runner, err := server.New(config.Server)
-			if err != nil {
+			if config.Server != nil {
+				x, err := server.New(config.Server)
+				if serverRunner != nil {
+					return err
+				}
+				serverRunner = x
+			}
+
+			var wg sync.WaitGroup
+
+			if clientRunner != nil {
+				zap.L().Debug("Running Client")
+				wg.Add(1)
+				go func() {
+					ctx, cancel = context.WithCancel(cmd.Context())
+					defer func() {
+						cancel()
+						wg.Done()
+					}()
+					errc <- clientRunner.Run(ctx)
+				}()
+			}
+
+			if serverRunner != nil {
+				zap.L().Debug("Running Server")
+				wg.Add(1)
+				go func() {
+					ctx, cancel = context.WithCancel(cmd.Context())
+					defer func() {
+						cancel()
+						wg.Done()
+					}()
+					errc <- serverRunner.Run(ctx)
+				}()
+			}
+
+			select {
+
+			case <-interruptChan: // first signal, cancel context
+				cancel()
+
+			case <-ctx.Done():
+
+			case err := <-errc:
 				return err
-			}
-			return run(runner)
 
+			}
+
+			wg.Wait()
+
+			return nil
 		},
 	}
 )
@@ -255,7 +329,10 @@ func Execute() error {
 }
 
 func init() {
-	rootCmd.AddCommand(versionCmd, getConfigCmd(), runCmd)
+
+	configCmd := getExampleConfigCmd()
+
+	rootCmd.AddCommand(versionCmd, configCmd, runCmd, installCmd)
 	runCmd.PersistentFlags().StringVarP(&configFileArg, "config", "c", "", fmt.Sprintf("config file; env var is %s", ConfigEnvVar))
-	runCmd.PersistentFlags().StringVarP(&debugLevelArg, "debug", "d", "", fmt.Sprintf("debug level (TRACE, DEBUG, INFO, WARN, ERROR) to STDERR; env var is %s", ConfigEnvVar))
+	runCmd.PersistentFlags().StringVarP(&debugLevelArg, "debug", "D", "", fmt.Sprintf("debug level (TRACE, DEBUG, INFO, WARN, ERROR) to STDERR; env var is %s", ConfigEnvVar))
 }
