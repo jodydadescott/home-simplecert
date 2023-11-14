@@ -17,6 +17,8 @@ const (
 	SynologyCertFile    = "cert.pem"
 	SynologyKeyFile     = "privkey.pem"
 	SynologyChainFile   = "fullchain.pem"
+	Synology            = "Synology"
+	Unifi               = "Unifi"
 )
 
 type OSType string

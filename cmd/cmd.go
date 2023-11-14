@@ -106,6 +106,17 @@ var (
 
 			installSystemd := func() error {
 
+				serviceName := BinaryName + ".service"
+
+				if util.FileExist(SystemdServiceFile) {
+					output, err := util.ExecuteCommand("systemctl", "stop", serviceName)
+					if err != nil {
+						return fmt.Errorf("output %s, error %w", output, err)
+					}
+
+					fmt.Fprintf(os.Stderr, "Service %s stopped\n", serviceName)
+				}
+
 				binaryFilePath, err := os.Executable()
 				if err != nil {
 					return err
@@ -118,7 +129,11 @@ var (
 					}
 				}
 
-				if !util.FileExist(DefaultConfigFile) {
+				configFilePreExist := false
+
+				if util.FileExist(DefaultConfigFile) {
+					configFilePreExist = true
+				} else {
 
 					config := getExampleConfig()
 					o, _ := yaml.Marshal(config)
@@ -129,6 +144,7 @@ var (
 					}
 
 					fmt.Fprintf(os.Stderr, "Config file %s was created", DefaultConfigFile)
+
 				}
 
 				binary, err := os.ReadFile(binaryFilePath)
@@ -146,8 +162,27 @@ var (
 					return err
 				}
 
+				if configFilePreExist {
+
+					output, err := util.ExecuteCommand("systemctl", "start", serviceName)
+					if err != nil {
+						return fmt.Errorf("output %s, error %w", output, err)
+					}
+
+					fmt.Fprintf(os.Stderr, "Service %s started\n", serviceName)
+
+					output, err = util.ExecuteCommand("systemctl", "enable", serviceName)
+					if err != nil {
+						return fmt.Errorf("output %s, error %w", output, err)
+					}
+
+					fmt.Fprintf(os.Stderr, "Service %s enabled\n", serviceName)
+
+					return nil
+				}
+
 				fmt.Fprintf(os.Stderr, "Installed as a systemd service. Configure the file %s and then run the commands:\n", DefaultConfigFile)
-				fmt.Fprintf(os.Stderr, "systemctl enable home-simplecert && systemctl start home-simplecert\n")
+				fmt.Fprintf(os.Stderr, "systemctl enable %s && systemctl start %s\n", serviceName, serviceName)
 				return nil
 
 			}

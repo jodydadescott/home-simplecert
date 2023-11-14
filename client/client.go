@@ -5,7 +5,6 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -45,7 +44,11 @@ func New(config *Config) (*Client, error) {
 	processDomain := func(domain *Domain) error {
 
 		if domain.Name == "" {
-			return fmt.Errorf("each domain must have a name")
+			return fmt.Errorf("domain must have a Name")
+		}
+
+		if domain.DomainName == "" {
+			return fmt.Errorf("domain must have a DomainName")
 		}
 
 		if domain.CertFile == "" && domain.FullChain == "" {
@@ -87,30 +90,37 @@ func New(config *Config) (*Client, error) {
 
 		domain := config.Domains[0]
 
-		if domain.Name == "" {
-			return fmt.Errorf("domain must have a name")
+		if domain.DomainName == "" {
+			return fmt.Errorf("domain must have a DomainName")
+		}
+
+		if domain.Name != "" {
+			zap.L().Debug(fmt.Sprintf("Domain Synology client has Name %s; it will be ignored", domain.Name))
 		}
 
 		if domain.CertFile != "" {
-			zap.L().Debug(fmt.Sprintf("Domain %s: Synology client has CertFile set; it will be ignored", domain.Name))
+			zap.L().Debug(fmt.Sprintf("Domain Synology client has CertFile %s; it will be ignored", domain.CertFile))
 		}
 
 		if domain.KeyFile != "" {
-			zap.L().Debug(fmt.Sprintf("Domain %s: Synology client has KeyFile set; it will be ignored", domain.Name))
+			zap.L().Debug(fmt.Sprintf("Domain Synology client has KeyFile %s; it will be ignored", domain.KeyFile))
 		}
 
 		if domain.FullChain != "" {
-			zap.L().Debug(fmt.Sprintf("Domain %s: Synology client has FullChain set; it will be ignored", domain.Name))
+			zap.L().Debug(fmt.Sprintf("Domain Synology client has FullChain %s; it will be ignored", domain.FullChain))
 		}
 
 		if domain.Hook != nil {
 			zap.L().Debug(fmt.Sprintf("Domain %s: Synology client has a Hook; it will be ignored", domain.Name))
+			zap.L().Debug("Domain Synology client has Hook; it will be ignored")
 		}
 
 		b, err := os.ReadFile(SynologyDefaultFile)
 		if err != nil {
 			return err
 		}
+
+		domain.Name = Synology
 
 		cerFile := strings.ReplaceAll(string(b), "\n", "")
 		certDir := filepath.Join(filepath.Dir(SynologyDefaultFile), cerFile)
@@ -141,28 +151,32 @@ func New(config *Config) (*Client, error) {
 
 		domain := config.Domains[0]
 
-		if domain.Name == "" {
-			return fmt.Errorf("domain must have a name")
+		if domain.DomainName == "" {
+			return fmt.Errorf("domain must have a DomainName")
+		}
+
+		if domain.Name != "" {
+			zap.L().Debug(fmt.Sprintf("Domain Unifi client has Name %s; it will be ignored", domain.Name))
 		}
 
 		if domain.CertFile != "" {
-			zap.L().Debug(fmt.Sprintf("Domain %s: Unifi client has CertFile set; it will be ignored", domain.Name))
+			zap.L().Debug(fmt.Sprintf("Domain Unifi client has CertFile %s; it will be ignored", domain.CertFile))
 		}
 
 		if domain.KeyFile != "" {
-			zap.L().Debug(fmt.Sprintf("Domain %s: Unifi client has KeyFile set; it will be ignored", domain.Name))
-			domain.KeyFile = ""
+			zap.L().Debug(fmt.Sprintf("Domain Unifi client has KeyFile %s; it will be ignored", domain.KeyFile))
 		}
 
 		if domain.FullChain != "" {
-			zap.L().Debug(fmt.Sprintf("Domain %s: Unifi client has FullChain set; it will be ignored", domain.Name))
-			domain.FullChain = ""
+			zap.L().Debug(fmt.Sprintf("Domain Unifi client has FullChain %s; it will be ignored", domain.FullChain))
 		}
 
 		if domain.Hook != nil {
 			zap.L().Debug(fmt.Sprintf("Domain %s: Unifi client has a Hook; it will be ignored", domain.Name))
-			domain.Hook = nil
+			zap.L().Debug("Domain Unifi client has Hook; it will be ignored")
 		}
+
+		domain.Name = Unifi
 
 		domain.CertFile = UnifiCertFile
 		domain.KeyFile = UnifiKeyFile
@@ -257,9 +271,7 @@ func (t *Client) Run(ctx context.Context) error {
 			zap.L().Debug(fmt.Sprintf("Executing cmd %s", logname))
 		}
 
-		cmd := exec.Command(name, args...)
-		rawoutput, err := cmd.CombinedOutput()
-		output := strings.ReplaceAll(string(rawoutput), "\n", "")
+		output, err := util.ExecuteCommand(name, args...)
 
 		if err == nil {
 			if logger.Trace {
@@ -305,7 +317,7 @@ func (t *Client) Run(ctx context.Context) error {
 		if domain.KeyFile != "" {
 
 			if logger.Trace {
-				zap.L().Debug(fmt.Sprintf("Domain %s: has KeyFile", domain.Name))
+				zap.L().Debug(fmt.Sprintf("Domain %s: has KeyFile %s", domain.Name, domain.KeyFile))
 			}
 
 			data := cert.GetKeyPEM()
@@ -314,7 +326,7 @@ func (t *Client) Run(ctx context.Context) error {
 
 				result = true
 				if logger.Trace {
-					zap.L().Debug(fmt.Sprintf("Domain %s: KeyFile changed", domain.Name))
+					zap.L().Debug(fmt.Sprintf("Domain %s: KeyFile %s changed", domain.Name, domain.KeyFile))
 				}
 
 				err := writeFile(domain.KeyFile, data)
@@ -324,7 +336,7 @@ func (t *Client) Run(ctx context.Context) error {
 
 			} else {
 				if logger.Trace {
-					zap.L().Debug(fmt.Sprintf("Domain %s: KeyFile unchanged", domain.Name))
+					zap.L().Debug(fmt.Sprintf("Domain %s: KeyFile %s unchanged", domain.Name, domain.KeyFile))
 				}
 			}
 		} else {
@@ -336,7 +348,7 @@ func (t *Client) Run(ctx context.Context) error {
 		if domain.CertFile != "" {
 
 			if logger.Trace {
-				zap.L().Debug(fmt.Sprintf("Domain %s: has CertFile", domain.Name))
+				zap.L().Debug(fmt.Sprintf("Domain %s: has CertFile %s", domain.Name, domain.CertFile))
 			}
 
 			data := cert.GetCertPEM()
@@ -345,7 +357,7 @@ func (t *Client) Run(ctx context.Context) error {
 
 				result = true
 				if logger.Trace {
-					zap.L().Debug(fmt.Sprintf("Domain %s: CertFile changed", domain.Name))
+					zap.L().Debug(fmt.Sprintf("Domain %s: CertFile %s changed", domain.Name, domain.CertFile))
 				}
 
 				err := writeFile(domain.CertFile, data)
@@ -355,7 +367,7 @@ func (t *Client) Run(ctx context.Context) error {
 
 			} else {
 				if logger.Trace {
-					zap.L().Debug(fmt.Sprintf("Domain %s: CertFile unchanged", domain.Name))
+					zap.L().Debug(fmt.Sprintf("Domain %s: CertFile %s unchanged", domain.Name, domain.CertFile))
 				}
 			}
 		} else {
@@ -367,7 +379,7 @@ func (t *Client) Run(ctx context.Context) error {
 		if domain.FullChain != "" {
 
 			if logger.Trace {
-				zap.L().Debug(fmt.Sprintf("Domain %s: has FullChain", domain.Name))
+				zap.L().Debug(fmt.Sprintf("Domain %s: has CertFile %s", domain.Name, domain.FullChain))
 			}
 
 			data := cert.GetCertPEM()
@@ -376,7 +388,7 @@ func (t *Client) Run(ctx context.Context) error {
 
 				result = true
 				if logger.Trace {
-					zap.L().Debug(fmt.Sprintf("Domain %s: FullChain changed", domain.Name))
+					zap.L().Debug(fmt.Sprintf("Domain %s: FullChain %s changed", domain.Name, domain.FullChain))
 				}
 
 				err := writeFile(domain.FullChain, data)
@@ -386,7 +398,7 @@ func (t *Client) Run(ctx context.Context) error {
 
 			} else {
 				if logger.Trace {
-					zap.L().Debug(fmt.Sprintf("Domain %s: FullChain unchanged", domain.Name))
+					zap.L().Debug(fmt.Sprintf("Domain %s: FullChain %s unchanged", domain.Name, domain.FullChain))
 				}
 			}
 		} else {
@@ -420,7 +432,7 @@ func (t *Client) Run(ctx context.Context) error {
 
 		for _, domain := range t.config.Domains {
 
-			cert, err := t.client.GetCert(domain.Name)
+			cert, err := t.client.GetCert(domain.DomainName)
 			if err != nil {
 				errs = multierror.Append(errs, fmt.Errorf("Domain %s %w", domain.Name, err))
 				continue

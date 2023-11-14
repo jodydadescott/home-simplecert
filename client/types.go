@@ -37,11 +37,12 @@ func (t *Config) AddDomain(domains ...*Domain) *Config {
 }
 
 type Domain struct {
-	Name      string `json:"name,omitempty" yaml:"name,omitempty"`
-	KeyFile   string `json:"keyFile,omitempty" yaml:"keyFile,omitempty"`
-	CertFile  string `json:"certFile,omitempty" yaml:"certFile,omitempty"`
-	FullChain string `json:"fullChain,omitempty" yaml:"fullChain,omitempty"`
-	Hook      *Hook  `json:"hook,omitempty" yaml:"hook,omitempty"`
+	Name       string `json:"name,omitempty" yaml:"name,omitempty"`
+	DomainName string `json:"domainName,omitempty" yaml:"domainName,omitempty"`
+	KeyFile    string `json:"keyFile,omitempty" yaml:"keyFile,omitempty"`
+	CertFile   string `json:"certFile,omitempty" yaml:"certFile,omitempty"`
+	FullChain  string `json:"fullChain,omitempty" yaml:"fullChain,omitempty"`
+	Hook       *Hook  `json:"hook,omitempty" yaml:"hook,omitempty"`
 }
 
 // Clone return copy
