@@ -1,4 +1,4 @@
-default:
+all:
 	cd linux && $(MAKE)
 	cd darwin && $(MAKE)
 

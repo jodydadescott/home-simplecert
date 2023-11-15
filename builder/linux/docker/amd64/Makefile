@@ -5,8 +5,8 @@ DOCKER_IMAGE_NAME?=$(PROJECT_NAME)
 DOCKER_IMAGE_TAG?=$(BUILD_NUMBER)
 
 container:
-	cd ../amd64 && make
-	cp ../amd64/home-simplecert .
+	cd ../../binary/amd64 && $(MAKE)
+	cp ../../binary/amd64/home-simplecert .
 	docker build -t $(DOCKER_REGISTRY)/$(DOCKER_IMAGE_NAME):$(DOCKER_IMAGE_TAG) .
 	touch container
 
