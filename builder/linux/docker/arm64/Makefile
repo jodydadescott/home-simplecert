@@ -10,6 +10,10 @@ container:
 	docker build -t $(DOCKER_REGISTRY)/$(DOCKER_IMAGE_NAME):$(DOCKER_IMAGE_TAG) .
 	touch container
 
+push:
+	$(MAKE) container
+	docker push $(DOCKER_REGISTRY)/$(DOCKER_IMAGE_NAME):$(DOCKER_IMAGE_TAG)
+
 clean:
 	$(RM) -r home-simplecert
 	$(RM) -r container
