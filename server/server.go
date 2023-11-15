@@ -394,7 +394,9 @@ func (t *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 
 		case "/getauthrequest":
-			return t.hashserver.NewRequest()
+			authRequest := &AuthRequest{}
+			authRequest.AuthRequest = t.hashserver.NewRequest()
+			return authRequest
 
 		case "/getauthtoken":
 
