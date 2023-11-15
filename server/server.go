@@ -394,9 +394,7 @@ func (t *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 
 		case "/getauthrequest":
-			authRequest := &AuthRequest{}
-			authRequest.AuthRequest = t.hashserver.NewRequest()
-			return authRequest
+			return t.hashserver.NewRequest()
 
 		case "/getauthtoken":
 
@@ -420,7 +418,7 @@ func (t *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				return response
 			}
 
-			token, err := t.hashserver.GetTokenFromRequest(authRequest.AuthRequest)
+			token, err := t.hashserver.GetTokenFromRequest(authRequest)
 			if err != nil {
 				response.Error = err.Error()
 				if logger.Trace {

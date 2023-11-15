@@ -2,10 +2,12 @@ package server
 
 import (
 	"github.com/jinzhu/copier"
+	hashauthserver "github.com/jodydadescott/simple-go-hash-auth/server"
+
 	"github.com/jodydadescott/home-simplecert/types"
 )
 
-type AuthRequest = types.AuthRequest
+type AuthRequest = hashauthserver.AuthRequest
 type TokenResponse = types.TokenResponse
 type CertResponse = types.CertResponse
 type CR = types.CR
