@@ -501,6 +501,8 @@ func (t *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	response := serveHTTP()
 	b, _ := json.Marshal(response)
 
+	fmt.Fprint(w, string(b))
+
 	if logger.Wire {
 		httpDebug := types.NewHTTPDebug(r, b)
 		b, _ := json.Marshal(httpDebug)
