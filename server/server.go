@@ -492,7 +492,8 @@ func (t *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		message += fmt.Sprintf("GET https:/%s/getcert?domain=example.com\n", r.Host)
 
 		return &SimpleMessage{
-			Message: message,
+			Message: "see error",
+			Error:   message,
 		}
 
 	}

@@ -51,19 +51,6 @@ func (t *CR) GetKeyPEM() []byte {
 	return t.certResource.PrivateKey
 }
 
-// type AuthRequest struct {
-// 	*hashserver.AuthRequest
-// 	Domain string
-// 	Error  string
-// }
-
-// // Clone return copy
-// func (t *AuthRequest) Clone() *AuthRequest {
-// 	c := &AuthRequest{}
-// 	copier.Copy(&c, &t)
-// 	return c
-// }
-
 type TokenResponse struct {
 	*hashserver.Token
 	Error string
