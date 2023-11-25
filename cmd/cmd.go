@@ -289,9 +289,7 @@ var (
 				}
 			}
 
-			if config.Logger != nil {
-				logger.SetConfig(config.Logger)
-			}
+			logger.SetConfig(config.Logger)
 
 			var clientRunner *client.Client
 			var serverRunner *server.Server
